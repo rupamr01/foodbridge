@@ -2,6 +2,8 @@
 
 FoodBridge connects hotels with surplus food to NGOs serving their communities. One Flask website provides the public landing page, email/password or Google sign-in, and a role-specific workspace for hotels, NGOs, and administrators.
 
+For the complete local setup, Supabase/MySQL architecture, security, troubleshooting, and deployment walkthrough, see [`PROJECT_GUIDE.md`](PROJECT_GUIDE.md).
+
 ## Features
 
 - Hotel and NGO registration and sign-in with email/password
