@@ -607,7 +607,7 @@ This setup is designed to work on one machine first:
 
 ## 10. Going live
 
-There are two realistic paths.
+There are three realistic paths. Option A gives you a link in minutes. Option C is the recommended all-free permanent setup.
 
 ### Option A — Temporary demo through a tunnel (easiest)
 
@@ -720,6 +720,222 @@ Deployment checklist:
 - [ ] Google sign-in tested in an incognito window
 - [ ] Photo upload tested
 - [ ] Map picker tested
+
+### Option C — All-free permanent deployment: Render + TiDB Cloud Starter
+
+This is the recommended persistent free setup as of November 2026. It uses only free plans, needs no credit card, and gives you a public `https://<name>.onrender.com` address.
+
+| Part | Free service | What it does |
+|---|---|---|
+| Code | GitHub Free | Stores the repository and triggers deploys |
+| Web app | Render Free web service | Runs Flask with Gunicorn; 750 instance hours/month; sleeps after 15 minutes idle |
+| Database | TiDB Cloud Starter | MySQL-compatible database; 5 GiB free storage; TLS required |
+| Google login | Supabase Free | Already configured |
+| Photos | Supabase Storage Free | Already configured |
+| HTTPS URL | Render `onrender.com` subdomain | Free HTTPS, no custom domain needed |
+
+**Important limits**
+
+- The first request after 15 idle minutes can take 30–60 seconds while Render wakes the app.
+- Render free instances have 512 MB RAM and 0.1 CPU.
+- TiDB Cloud Starter has a monthly free quota. Check the current quota in the TiDB console.
+- Render's outbound IP addresses are not fixed. TiDB's public endpoint firewall must allow all IPs (`0.0.0.0/0`) for this setup. Use a strong database password.
+- Free plans have no production SLA. Keep backups and do not treat this as permanent infrastructure for real users.
+
+#### C1. Install Git and create a GitHub repository
+
+Git is not currently installed on this machine. Install it once:
+
+```powershell
+winget install --id Git.Git -e --source winget
+```
+
+Close and reopen PowerShell, then check:
+
+```powershell
+git --version
+```
+
+Create an empty repository on <https://github.com/new>:
+
+- Name: `foodbridge`
+- Visibility: Public or Private (both work with Render)
+- Do **not** add a README, `.gitignore`, or license; the project already has them.
+
+Then push the project from its folder:
+
+```powershell
+git init
+git add .
+git status
+```
+
+Before committing, confirm `.env` and `.venv/` are **not** in the list. The included `.gitignore` should exclude them.
+
+```powershell
+git commit -m "FoodBridge ready for deployment"
+git branch -M main
+git remote add origin https://github.com/<your-username>/foodbridge.git
+git push -u origin main
+```
+
+#### C2. Create the free TiDB Cloud Starter database
+
+1. Sign in at <https://tidbcloud.com/>.
+2. Open **My TiDB** and click **Create Resource**.
+3. Select **Starter**.
+4. Compatibility mode: **MySQL Compatible**.
+5. Name: `foodbridge`.
+6. Choose the region closest to you.
+7. Set the **spending limit to 0** so the instance stays free. Do not add a card.
+8. Click **Create** and wait about 30 seconds.
+9. Open the instance, click **Connect**, keep **Public**, and generate a password.
+10. Save these values somewhere private:
+    - Host (looks like `gateway01.<region>.prod.aws.tidbcloud.com`)
+    - Port: `4000`
+    - User: the full prefix plus `.root`, for example `3f9a2b7c.root`
+    - Password: the generated 16-character password
+
+11. Open **Settings → Networking** (or the firewall/IP access list link in the Connect dialog) and allow all IPs:
+    - `0.0.0.0/0`
+
+    This is needed because Render does not provide a fixed outbound IP on the free plan. The database is still protected by TLS and the password.
+
+12. Create the database. Use the TiDB **SQL Editor** if available, or connect with the MySQL client:
+
+    ```sql
+    CREATE DATABASE IF NOT EXISTS foodbridge
+      CHARACTER SET utf8mb4
+      COLLATE utf8mb4_unicode_ci;
+    ```
+
+13. Import the schema with the local MySQL 8 client:
+
+    ```powershell
+    & "C:\Program Files\MySQL\MySQL Server 8.0\bin\mysql.exe" `
+      -h <TIDB_HOST> -P 4000 -u "<PREFIX>.root" -p `
+      --ssl-mode=REQUIRED foodbridge `
+      -e "SOURCE C:/Users/rupam/Downloads/Foodbridge-main/database/schema.sql;"
+    ```
+
+    Enter the TiDB password when prompted. You can also use MySQL Workbench with **SSL mode: Required**.
+
+    Verify:
+
+    ```sql
+    USE foodbridge;
+    SHOW TABLES;
+    -- Expected: accounts, foods, orders
+    ```
+
+#### C3. Create the Render web service
+
+1. Sign in at <https://render.com/> with GitHub. No credit card is required.
+2. Click **New → Web Service**.
+3. Connect the `foodbridge` GitHub repository.
+4. Fill in:
+   - **Name:** a unique name, for example `foodbridge-demo-rupam`
+   - **Region:** closest to you
+   - **Branch:** `main`
+   - **Runtime:** Python 3
+   - **Build Command:** `pip install -r requirements.txt`
+   - **Start Command:** `gunicorn app:app --bind 0.0.0.0:$PORT --workers 1 --threads 4 --timeout 120`
+   - **Instance Type:** Free
+5. Add these environment variables:
+
+   | Key | Value |
+   |---|---|
+   | `FOODBRIDGE_SECRET_KEY` | A new random value; generate it with the command below |
+   | `FOODBRIDGE_DB_HOST` | TiDB host |
+   | `FOODBRIDGE_DB_PORT` | `4000` |
+   | `FOODBRIDGE_DB_NAME` | `foodbridge` |
+   | `FOODBRIDGE_DB_USER` | `<PREFIX>.root` (no quotes) |
+   | `FOODBRIDGE_DB_PASSWORD` | TiDB password |
+   | `FOODBRIDGE_DB_SSL_CA` | `/etc/ssl/certs/ca-certificates.crt` |
+   | `FOODBRIDGE_COOKIE_SECURE` | `1` |
+   | `SUPABASE_URL` | `https://yugxwsqoxlgkhsohthyf.supabase.co` |
+   | `SUPABASE_PUBLISHABLE_KEY` | Your current publishable key |
+   | `SUPABASE_SECRET_KEY` | Your current secret key |
+   | `SUPABASE_STORAGE_BUCKET` | `food-photos` |
+
+   Generate the Flask secret locally:
+
+   ```powershell
+   .\.venv\Scripts\python -c "import secrets; print(secrets.token_urlsafe(48))"
+   ```
+
+   The repository also contains a `Procfile`, so Render can detect the start command automatically. Setting it explicitly in the dashboard is still recommended.
+
+   `FOODBRIDGE_DB_SSL_CA` makes the app verify TiDB's TLS certificate. If the first deploy fails with a certificate error, remove that variable and redeploy. The connection will still be encrypted, but the certificate will not be verified.
+
+6. Click **Create Web Service**. Wait for the build and deploy to finish.
+7. Copy the public URL, for example:
+
+   ```text
+   https://foodbridge-demo-rupam.onrender.com
+   ```
+
+   If the name is already taken, Render asks you to choose another one.
+
+#### C4. Create the admin account in the cloud database
+
+Run this locally against the TiDB database. The environment variables below override the values in `.env` for this terminal only.
+
+```powershell
+$env:FOODBRIDGE_DB_HOST = "<TIDB_HOST>"
+$env:FOODBRIDGE_DB_PORT = "4000"
+$env:FOODBRIDGE_DB_NAME = "foodbridge"
+$env:FOODBRIDGE_DB_USER = "<PREFIX>.root"
+$env:FOODBRIDGE_DB_PASSWORD = "<TIDB_PASSWORD>"
+$env:FOODBRIDGE_DB_SSL_CA = "C:\path\to\isrgrootx1.pem"
+
+.\.venv\Scripts\flask --app app create-admin admin@example.org
+```
+
+If you do not have the CA file on Windows, download it from <https://letsencrypt.org/certs/isrgrootx1.pem> and save it as `C:\certs\isrgrootx1.pem`. On Linux/Render, use the system bundle path shown in C3 instead.
+
+Close that PowerShell window afterward so the cloud credentials are not left in your environment.
+
+#### C5. Point Supabase and Google at the Render URL
+
+In Supabase → **Authentication → URL Configuration**:
+
+- **Site URL:** `https://foodbridge-demo-rupam.onrender.com`
+- Add redirect URL:
+  `https://foodbridge-demo-rupam.onrender.com/auth/callback`
+- Keep the localhost redirect URLs so local development still works.
+
+In Google Cloud → your OAuth client:
+
+- Add to **Authorized JavaScript origins:**
+  `https://foodbridge-demo-rupam.onrender.com`
+- The **Authorized redirect URI** does not change:
+  `https://<ref>.supabase.co/auth/v1/callback`
+
+#### C6. Test the live site
+
+1. Open the Render URL.
+2. Wait for the first wake-up if the service was idle.
+3. Open `/login` in an incognito window.
+4. Sign in with Google.
+5. Complete the new-account form if prompted.
+6. Create a hotel listing with a photo and a map pin.
+7. Create or use an NGO account and request the listing.
+8. Accept the request as the hotel.
+9. Sign in at `/admin` with the admin account.
+10. Confirm that photos load from Supabase and that the map tiles load.
+
+#### C7. Updating the live site
+
+- Push changes to GitHub. Render redeploys automatically.
+- Database changes must be applied separately to TiDB.
+- To back up TiDB, export the `foodbridge` database from the TiDB console or with `mysqldump`.
+- If the free service sleeps, the first request after idle is slow. That is expected.
+- If you outgrow the free quota, upgrade or move to a paid host. Do not add a card unless you are ready to pay.
+
+#### Optional: keep using your local MySQL
+
+You do not have to migrate data for a demo. Option A (tunnel) uses local MySQL. Option C uses TiDB. The two databases are independent unless you export and import data between them.
 
 ### Custom domain
 

@@ -68,17 +68,28 @@ def public_frontend_config():
 
 
 def database_connection():
-    return mysql.connector.connect(
-        host=os.environ.get("FOODBRIDGE_DB_HOST", "localhost"),
-        port=int(os.environ.get("FOODBRIDGE_DB_PORT", "3306")),
-        user=os.environ.get("FOODBRIDGE_DB_USER", "root"),
-        password=os.environ.get("FOODBRIDGE_DB_PASSWORD", ""),
-        database=os.environ.get("FOODBRIDGE_DB_NAME", "foodbridge"),
-        charset="utf8mb4",
-        autocommit=False,
-        use_pure=True,
-        connection_timeout=10,
-    )
+    options = {
+        "host": os.environ.get("FOODBRIDGE_DB_HOST", "localhost"),
+        "port": int(os.environ.get("FOODBRIDGE_DB_PORT", "3306")),
+        "user": os.environ.get("FOODBRIDGE_DB_USER", "root"),
+        "password": os.environ.get("FOODBRIDGE_DB_PASSWORD", ""),
+        "database": os.environ.get("FOODBRIDGE_DB_NAME", "foodbridge"),
+        "charset": "utf8mb4",
+        "autocommit": False,
+        "use_pure": True,
+        "connection_timeout": 10,
+    }
+    # Cloud MySQL providers such as TiDB Cloud require TLS. Pointing this at
+    # the provider's CA bundle (or the Linux system bundle) also verifies the
+    # server certificate instead of only encrypting the connection.
+    ssl_ca = os.environ.get("FOODBRIDGE_DB_SSL_CA", "").strip()
+    if ssl_ca:
+        options.update(
+            ssl_ca=ssl_ca,
+            ssl_verify_cert=True,
+            ssl_verify_identity=True,
+        )
+    return mysql.connector.connect(**options)
 
 
 @contextmanager
