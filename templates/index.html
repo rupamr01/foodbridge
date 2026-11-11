@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#087f5b">
+  <title>FoodBridge | Community Food Network</title>
+  <link rel="icon" href="/static/assets/images/logo.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/static/vendor/leaflet/leaflet.css">
+  <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar" id="sidebar">
+      <a class="brand" href="/">
+        <img src="/static/assets/images/logo.svg" alt="" class="brand-logo">
+        <span>Food<span class="brand-green">Bridge</span><small>LESS WASTE. MORE SMILES.</small></span>
+      </a>
+      <div class="profile-mini">
+        <div class="avatar" id="userAvatar" aria-hidden="true">F</div>
+        <div><strong id="userName">FoodBridge</strong><small id="userRole">Account</small></div>
+      </div>
+      <p class="nav-label">WORKSPACE</p>
+      <nav class="nav-list" id="mainNavigation" aria-label="Main navigation"></nav>
+      <div class="sidebar-bottom">
+        <div class="impact-card">
+          <div class="impact-symbol">✦</div>
+          <strong>Good food. Good people.</strong>
+          <p>Connect surplus food with communities that need it.</p>
+        </div>
+        <button class="nav-item" id="logoutButton" type="button"><span aria-hidden="true">↪</span> Sign out</button>
+        <small class="version">FOODBRIDGE · COMMUNITY FOOD NETWORK</small>
+      </div>
+    </aside>
+
+    <main class="main-area">
+      <header class="topbar">
+        <button class="menu-toggle" id="menuToggle" aria-label="Toggle navigation" type="button">☰</button>
+        <div class="breadcrumb">FoodBridge <span>/</span> <strong id="pageName">Overview</strong></div>
+        <div class="top-user"><div><strong id="topUserName">FoodBridge</strong><small id="topUserRole">Account</small></div></div>
+      </header>
+      <section class="content" id="pageContent" aria-live="polite"></section>
+      <footer>© 2026 FoodBridge <span>Connecting surplus food with communities in need.</span></footer>
+    </main>
+  </div>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <script src="/static/vendor/leaflet/leaflet.js"></script>
+  <script src="/static/js/portal.js"></script>
+</body>
+</html>

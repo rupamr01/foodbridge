@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#087f5b">
+  <meta name="supabase-url" content="{{ supabase_url }}">
+  <meta name="supabase-anon-key" content="{{ supabase_anon_key }}">
+  <title>Sign in | FoodBridge</title>
+  <link rel="icon" href="/static/assets/images/logo.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body class="auth-page">
+  <main class="auth-layout">
+    <a class="brand auth-brand" href="/">
+      <img src="/static/assets/images/logo.svg" alt="" class="brand-logo">
+      <span>Food<span class="brand-green">Bridge</span><small>LESS WASTE. MORE SMILES.</small></span>
+    </a>
+    <section class="auth-card">
+      <p class="eyebrow">WELCOME BACK</p>
+      <h1>Sign in to FoodBridge</h1>
+      <p class="auth-intro">Use your Hotel or NGO account to continue.</p>
+      <form id="loginForm">
+        <div class="field">
+          <label for="email">Email address</label>
+          <input id="email" name="email" type="email" autocomplete="email" required>
+        </div>
+        <div class="field">
+          <label for="password">Password</label>
+          <input id="password" name="password" type="password" autocomplete="current-password" required>
+        </div>
+        <p class="form-message" id="formMessage" role="alert"></p>
+        <button class="btn btn-primary btn-block" type="submit">Sign in</button>
+      </form>
+      <div class="auth-divider" id="googleLoginDivider" hidden><span>or</span></div>
+      <button class="btn btn-google btn-block" id="googleLoginButton" type="button" hidden>
+        <span class="google-mark" aria-hidden="true">G</span> Continue with Google
+      </button>
+      <p class="auth-switch">New to FoodBridge? <a href="/signup">Create an account</a></p>
+    </section>
+    <p class="auth-foot">FoodBridge · Connecting surplus food with communities in need.</p>
+  </main>
+  <script src="/static/vendor/supabase/supabase.js"></script>
+  <script src="/static/js/auth.js"></script>
+</body>
+</html>

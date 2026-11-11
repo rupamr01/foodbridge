@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#087f5b">
+  <meta name="robots" content="noindex">
+  <meta name="supabase-url" content="{{ supabase_url }}">
+  <meta name="supabase-anon-key" content="{{ supabase_anon_key }}">
+  <title>Google sign-in | FoodBridge</title>
+  <link rel="icon" href="/static/assets/images/logo.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body class="auth-page">
+  <main class="auth-layout">
+    <a class="brand auth-brand" href="/">
+      <img src="/static/assets/images/logo.svg" alt="" class="brand-logo">
+      <span>Food<span class="brand-green">Bridge</span><small>LESS WASTE. MORE SMILES.</small></span>
+    </a>
+    <section class="auth-card auth-callback-card">
+      <p class="eyebrow">GOOGLE SIGN-IN</p>
+      <h1 id="callbackTitle">Completing sign-in…</h1>
+      <p class="auth-intro" id="callbackMessage" role="status" aria-live="polite">
+        Verifying your Google account. This only takes a moment.
+      </p>
+      <div class="auth-progress" id="callbackProgress" aria-hidden="true"><span></span><span></span><span></span></div>
+
+      <form id="googleCompleteForm" hidden>
+        <p class="auth-intro" id="googleCompleteIntro">
+          Your Google account is verified. Choose how you will use FoodBridge.
+        </p>
+        <div class="field">
+          <label for="googleName">Organization name</label>
+          <input id="googleName" name="name" minlength="2" maxlength="160" autocomplete="organization" required>
+        </div>
+        <div class="field">
+          <label for="googleRole">Account type</label>
+          <select id="googleRole" name="role" required>
+            <option value="hotel">Hotel / Food donor</option>
+            <option value="ngo">NGO / Food recipient</option>
+          </select>
+        </div>
+        <p class="form-message" id="googleFormMessage" role="alert"></p>
+        <button class="btn btn-primary btn-block" type="submit">Finish creating account</button>
+        <p class="auth-switch">Changed your mind? <a href="/login">Return to sign in</a></p>
+      </form>
+
+      <div class="auth-actions" id="callbackActions" hidden>
+        <a class="btn btn-primary btn-block" href="/login">Back to sign in</a>
+        <a class="btn btn-outline btn-block" href="/signup">Create an account</a>
+      </div>
+
+      <p class="auth-switch" id="callbackSwitch">Trouble signing in? <a href="/login">Return to sign in</a></p>
+      <noscript><p class="form-message">JavaScript is required to complete Google sign-in.</p></noscript>
+    </section>
+    <p class="auth-foot">FoodBridge · Connecting surplus food with communities in need.</p>
+  </main>
+  <script src="/static/vendor/supabase/supabase.js"></script>
+  <script src="/static/js/callback.js"></script>
+</body>
+</html>
