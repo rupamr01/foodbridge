@@ -40,8 +40,9 @@ class MySQLWorkflowTests(unittest.TestCase):
                 cursor.execute("DELETE FROM foods")
                 cursor.execute("DELETE FROM accounts")
                 cursor.execute(
-                    "INSERT INTO accounts (name, email, password_hash, role) "
-                    "VALUES (%s, %s, %s, 'admin')",
+                    "INSERT INTO accounts "
+                    "(name, email, password_hash, role, email_verified) "
+                    "VALUES (%s, %s, %s, 'admin', 1)",
                     (
                         "FoodBridge Admin",
                         "admin@foodbridge.test",
@@ -53,17 +54,44 @@ class MySQLWorkflowTests(unittest.TestCase):
         self.ngo = foodbridge_app.app.test_client()
         self.admin = foodbridge_app.app.test_client()
 
+    def register_and_verify(self, client, payload):
+        sent = []
+
+        def capture_code(to_email, otp):
+            sent.append((to_email, otp))
+
+        with patch.object(
+            foodbridge_app,
+            "send_otp_email",
+            side_effect=capture_code,
+        ):
+            response = client.post("/api/register", json=payload)
+        self.assertEqual(response.status_code, 201)
+        body = response.get_json()
+        self.assertTrue(body["verification_required"])
+        self.assertTrue(body["otp_sent"])
+        self.assertEqual(len(sent), 1)
+        self.assertEqual(sent[0][0], payload["email"])
+
+        verified = client.post(
+            "/api/verify-email",
+            json={"email": payload["email"], "code": sent[0][1]},
+        )
+        self.assertEqual(verified.status_code, 200)
+        self.assertTrue(verified.get_json()["logged_in"])
+        return body
+
     def test_hotel_listing_is_visible_to_ngo_and_orders_are_shared(self):
-        hotel_signup = self.hotel.post(
-            "/api/register",
-            json={
+        hotel_signup = self.register_and_verify(
+            self.hotel,
+            {
                 "name": "North Hotel",
                 "email": "hotel@foodbridge.test",
                 "password": "hotel-test-password",
                 "role": "hotel",
             },
         )
-        self.assertEqual(hotel_signup.status_code, 201)
+        self.assertEqual(hotel_signup["account"]["role"], "hotel")
 
         food_response = self.hotel.post(
             "/api/foods",
@@ -83,16 +111,16 @@ class MySQLWorkflowTests(unittest.TestCase):
         self.assertEqual(food_response.status_code, 201)
         food_id = food_response.get_json()["id"]
 
-        ngo_signup = self.ngo.post(
-            "/api/register",
-            json={
+        ngo_signup = self.register_and_verify(
+            self.ngo,
+            {
                 "name": "Hope NGO",
                 "email": "ngo@foodbridge.test",
                 "password": "ngo-test-password",
                 "role": "ngo",
             },
         )
-        self.assertEqual(ngo_signup.status_code, 201)
+        self.assertEqual(ngo_signup["account"]["role"], "ngo")
         available_food = self.ngo.get("/api/foods").get_json()["foods"]
         self.assertEqual(len(available_food), 1)
         self.assertEqual(available_food[0]["donor_name"], "North Hotel")
@@ -167,17 +195,67 @@ class MySQLWorkflowTests(unittest.TestCase):
             401,
         )
 
-    def test_google_sign_in_links_existing_accounts_and_creates_new_ones(self):
-        hotel_signup = self.hotel.post(
-            "/api/register",
+    def test_unverified_login_returns_an_otp_challenge(self):
+        sent = []
+
+        def capture_code(to_email, otp):
+            sent.append((to_email, otp))
+
+        with patch.object(
+            foodbridge_app,
+            "send_otp_email",
+            side_effect=capture_code,
+        ):
+            signup = self.hotel.post(
+                "/api/register",
+                json={
+                    "name": "North Hotel",
+                    "email": "hotel@foodbridge.test",
+                    "password": "hotel-test-password",
+                    "role": "hotel",
+                },
+            )
+        self.assertEqual(signup.status_code, 201)
+        self.assertEqual(self.hotel.get("/api/me").status_code, 401)
+
+        login = self.hotel.post(
+            "/api/login",
             json={
-                "name": "North Hotel",
                 "email": "hotel@foodbridge.test",
                 "password": "hotel-test-password",
-                "role": "hotel",
             },
         )
+        self.assertEqual(login.status_code, 403)
+        self.assertEqual(login.get_json()["code"], "email_unverified")
+
+        resend = self.hotel.post(
+            "/api/resend-otp",
+            json={"email": "hotel@foodbridge.test"},
+        )
+        self.assertEqual(resend.status_code, 429)
+        self.assertGreaterEqual(resend.get_json()["retry_after"], 1)
+
+        verified = self.hotel.post(
+            "/api/verify-email",
+            json={"email": "hotel@foodbridge.test", "code": sent[0][1]},
+        )
+        self.assertEqual(verified.status_code, 200)
+        self.assertTrue(verified.get_json()["logged_in"])
+        self.assertEqual(self.hotel.get("/api/me").status_code, 200)
+
+    def test_google_sign_in_links_existing_accounts_and_creates_new_ones(self):
+        with patch.object(foodbridge_app, "send_otp_email"):
+            hotel_signup = self.hotel.post(
+                "/api/register",
+                json={
+                    "name": "North Hotel",
+                    "email": "hotel@foodbridge.test",
+                    "password": "hotel-test-password",
+                    "role": "hotel",
+                },
+            )
         self.assertEqual(hotel_signup.status_code, 201)
+        self.assertEqual(self.hotel.get("/api/me").status_code, 401)
 
         linked_user = {
             "id": "google-existing-uid",
@@ -200,6 +278,16 @@ class MySQLWorkflowTests(unittest.TestCase):
             self.hotel.get("/api/me").get_json()["account"]["email"],
             "hotel@foodbridge.test",
         )
+        with foodbridge_app.db_connection() as connection:
+            with connection.cursor(dictionary=True) as cursor:
+                cursor.execute(
+                    "SELECT email_verified, supabase_uid FROM accounts "
+                    "WHERE email = %s",
+                    ("hotel@foodbridge.test",),
+                )
+                linked_account = cursor.fetchone()
+        self.assertEqual(linked_account["email_verified"], 1)
+        self.assertEqual(linked_account["supabase_uid"], "google-existing-uid")
 
         new_user = {
             "id": "google-new-uid",

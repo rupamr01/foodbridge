@@ -1,10 +1,16 @@
+import hashlib
+import hmac
 import os
 import re
 import secrets
+import smtplib
+import ssl
 import uuid
 from contextlib import contextmanager
-from datetime import date, datetime
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
+from email.message import EmailMessage
+from email.utils import formataddr
 from functools import wraps
 from pathlib import Path
 
@@ -33,6 +39,12 @@ FOOD_CATEGORIES = {
 ACCOUNT_ROLES = ("hotel", "ngo")
 MAX_QUANTITY = Decimal("999999")
 MAX_PHOTO_BYTES = 5 * 1024 * 1024
+OTP_TTL_MINUTES = 10
+OTP_MAX_ATTEMPTS = 5
+OTP_RESEND_SECONDS = 60
+OTP_MAX_SENDS_PER_HOUR = 5
+OTP_CODE_PATTERN = re.compile(r"^\d{6}$")
+OTP_DEBUG = os.environ.get("FOODBRIDGE_OTP_DEBUG") == "1"
 PHOTO_UPLOAD_DIR = BASE_DIR / "static" / "uploads" / "food-photos"
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "").rstrip("/")
 # Support Supabase's new publishable/secret keys and the legacy anon/service_role keys.
@@ -254,6 +266,195 @@ def verify_supabase_token(access_token):
     return payload, None
 
 
+class EmailDeliveryError(Exception):
+    """Raised when the verification email cannot be sent."""
+
+
+class OtpCooldownError(Exception):
+    """Raised when a new code is requested too soon."""
+
+    def __init__(self, retry_after):
+        super().__init__("Please wait before requesting another code.")
+        self.retry_after = max(1, int(retry_after))
+
+
+class OtpRateLimitError(OtpCooldownError):
+    """Raised when too many codes were requested in one hour."""
+
+
+def utc_now():
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
+def generate_otp():
+    return f"{secrets.randbelow(1_000_000):06d}"
+
+
+def otp_digest(account_id, otp):
+    """Bind the code to one account and never store the plain code."""
+    secret = (app.config.get("SECRET_KEY") or "").encode("utf-8")
+    value = f"{account_id}:{otp}".encode("utf-8")
+    return hmac.new(secret, value, hashlib.sha256).hexdigest()
+
+
+def smtp_settings():
+    security = os.environ.get("FOODBRIDGE_SMTP_SECURITY", "starttls").strip().lower()
+    default_port = "465" if security == "ssl" else "587"
+    return {
+        "host": os.environ.get("FOODBRIDGE_SMTP_HOST", "").strip(),
+        "port": os.environ.get("FOODBRIDGE_SMTP_PORT", default_port).strip(),
+        "username": os.environ.get("FOODBRIDGE_SMTP_USERNAME", "").strip(),
+        "password": os.environ.get("FOODBRIDGE_SMTP_PASSWORD", ""),
+        "from_email": os.environ.get("FOODBRIDGE_SMTP_FROM_EMAIL", "").strip(),
+        "from_name": os.environ.get("FOODBRIDGE_SMTP_FROM_NAME", "FoodBridge").strip()
+        or "FoodBridge",
+        "security": security,
+    }
+
+
+def email_delivery_configured():
+    settings = smtp_settings()
+    return bool(settings["host"] and settings["from_email"])
+
+
+def send_email(to_email, subject, text_body, html_body=None):
+    """Send one message through the configured SMTP relay."""
+    settings = smtp_settings()
+    if not settings["host"] or not settings["from_email"]:
+        raise EmailDeliveryError("Email delivery is not configured.")
+    if settings["security"] not in ("starttls", "ssl", "none"):
+        raise EmailDeliveryError("Email security must be starttls, ssl, or none.")
+    try:
+        port = int(settings["port"])
+    except ValueError as error:
+        raise EmailDeliveryError("Email port must be a number.") from error
+
+    message = EmailMessage()
+    message["Subject"] = subject
+    message["From"] = formataddr((settings["from_name"], settings["from_email"]))
+    message["To"] = to_email
+    message.set_content(text_body)
+    if html_body:
+        message.add_alternative(html_body, subtype="html")
+
+    try:
+        if settings["security"] == "ssl":
+            client = smtplib.SMTP_SSL(
+                settings["host"],
+                port,
+                timeout=20,
+                context=ssl.create_default_context(),
+            )
+        else:
+            client = smtplib.SMTP(settings["host"], port, timeout=20)
+        with client:
+            client.ehlo()
+            if settings["security"] == "starttls":
+                client.starttls(context=ssl.create_default_context())
+                client.ehlo()
+            if settings["username"]:
+                client.login(settings["username"], settings["password"])
+            client.send_message(message)
+    except (OSError, smtplib.SMTPException) as error:
+        raise EmailDeliveryError("The email could not be delivered.") from error
+
+
+def send_otp_email(to_email, otp):
+    subject = "Your FoodBridge verification code"
+    text_body = (
+        f"Your FoodBridge verification code is: {otp}\n\n"
+        f"It expires in {OTP_TTL_MINUTES} minutes. If you did not create a "
+        "FoodBridge account, you can ignore this email.\n\n"
+        "FoodBridge - Less waste. More smiles."
+    )
+    html_body = (
+        '<div style="font-family:Arial,sans-serif;max-width:480px;margin:auto;'
+        'padding:24px;color:#163e30">'
+        '<h2 style="margin:0 0 12px">Verify your FoodBridge email</h2>'
+        "<p>Enter this 6-digit code to finish creating your account:</p>"
+        '<p style="font-size:34px;font-weight:700;letter-spacing:8px;'
+        f'margin:20px 0;color:#087f5b">{otp}</p>'
+        f"<p>The code expires in {OTP_TTL_MINUTES} minutes. If you did not "
+        "create a FoodBridge account, you can ignore this email.</p>"
+        '<p style="color:#6b7c72;font-size:12px">FoodBridge - Less waste. '
+        "More smiles.</p></div>"
+    )
+    send_email(to_email, subject, text_body, html_body)
+
+
+def issue_otp(account_id, email):
+    """Create, store, and email a fresh code. Raises if sending fails."""
+    now = utc_now()
+    otp = generate_otp()
+    with db_connection() as connection:
+        with connection.cursor(dictionary=True) as cursor:
+            cursor.execute(
+                "SELECT otp_last_sent_at, otp_send_window_start, otp_send_count "
+                "FROM accounts WHERE id = %s FOR UPDATE",
+                (account_id,),
+            )
+            account = cursor.fetchone()
+            if not account:
+                raise EmailDeliveryError("Account not found.")
+
+            last_sent = account["otp_last_sent_at"]
+            if last_sent:
+                elapsed = (now - last_sent).total_seconds()
+                if elapsed < OTP_RESEND_SECONDS:
+                    raise OtpCooldownError(OTP_RESEND_SECONDS - elapsed)
+
+            window_start = account["otp_send_window_start"]
+            send_count = int(account["otp_send_count"] or 0)
+            if not window_start or (now - window_start).total_seconds() >= 3600:
+                window_start = now
+                send_count = 0
+            if send_count >= OTP_MAX_SENDS_PER_HOUR:
+                raise OtpRateLimitError(
+                    3600 - (now - window_start).total_seconds()
+                )
+
+            cursor.execute(
+                "UPDATE accounts SET otp_hash = %s, otp_expires_at = %s, "
+                "otp_attempts = 0, otp_send_window_start = %s, "
+                "otp_send_count = %s WHERE id = %s",
+                (
+                    otp_digest(account_id, otp),
+                    now + timedelta(minutes=OTP_TTL_MINUTES),
+                    window_start,
+                    send_count + 1,
+                    account_id,
+                ),
+            )
+        connection.commit()
+
+    try:
+        send_otp_email(email, otp)
+    except EmailDeliveryError:
+        app.logger.exception("Could not send the FoodBridge verification email")
+        with db_connection() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "UPDATE accounts SET otp_last_sent_at = NULL WHERE id = %s",
+                    (account_id,),
+                )
+            connection.commit()
+        if OTP_DEBUG:
+            app.logger.warning(
+                "FOODBRIDGE_OTP_DEBUG is on. Code for %s: %s", email, otp
+            )
+            return False
+        raise
+
+    with db_connection() as connection:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "UPDATE accounts SET otp_last_sent_at = %s WHERE id = %s",
+                (utc_now(), account_id),
+            )
+        connection.commit()
+    return True
+
+
 @app.before_request
 def require_secret_key():
     if not app.config["SECRET_KEY"]:
@@ -345,15 +546,15 @@ def google_login():
         with db_connection() as connection:
             with connection.cursor(dictionary=True) as cursor:
                 cursor.execute(
-                    "SELECT id, name, email, role, supabase_uid FROM accounts "
-                    "WHERE supabase_uid = %s LIMIT 1",
+                    "SELECT id, name, email, role, supabase_uid, email_verified "
+                    "FROM accounts WHERE supabase_uid = %s LIMIT 1",
                     (supabase_uid,),
                 )
                 account = cursor.fetchone()
                 if not account:
                     cursor.execute(
-                        "SELECT id, name, email, role, supabase_uid FROM accounts "
-                        "WHERE email = %s LIMIT 1",
+                        "SELECT id, name, email, role, supabase_uid, email_verified "
+                        "FROM accounts WHERE email = %s LIMIT 1",
                         (email,),
                     )
                     account = cursor.fetchone()
@@ -369,12 +570,19 @@ def google_login():
                             "This email is linked to a different Google account.",
                             409,
                         )
-                    if not account["supabase_uid"]:
+                    if not account["supabase_uid"] or not account["email_verified"]:
+                        # Google has already verified this address, so link the
+                        # account and clear any pending code.
                         cursor.execute(
-                            "UPDATE accounts SET supabase_uid = %s WHERE id = %s",
+                            "UPDATE accounts SET supabase_uid = COALESCE(supabase_uid, %s), "
+                            "email_verified = 1, otp_hash = NULL, otp_expires_at = NULL, "
+                            "otp_attempts = 0 WHERE id = %s",
                             (supabase_uid, account["id"]),
                         )
-                        account["supabase_uid"] = supabase_uid
+                        account["supabase_uid"] = (
+                            account["supabase_uid"] or supabase_uid
+                        )
+                        account["email_verified"] = 1
                 else:
                     if role not in ACCOUNT_ROLES:
                         return jsonify({
@@ -393,8 +601,8 @@ def google_login():
                         )
                     cursor.execute(
                         "INSERT INTO accounts "
-                        "(supabase_uid, name, email, password_hash, role) "
-                        "VALUES (%s, %s, %s, %s, %s)",
+                        "(supabase_uid, name, email, password_hash, role, email_verified) "
+                        "VALUES (%s, %s, %s, %s, %s, 1)",
                         (
                             supabase_uid,
                             name,
@@ -409,6 +617,7 @@ def google_login():
                         "email": email,
                         "role": role,
                         "supabase_uid": supabase_uid,
+                        "email_verified": 1,
                     }
                     created = True
             connection.commit()
@@ -445,8 +654,9 @@ def register():
         with db_connection() as connection:
             with connection.cursor(dictionary=True) as cursor:
                 cursor.execute(
-                    "INSERT INTO accounts (name, email, password_hash, role) "
-                    "VALUES (%s, %s, %s, %s)",
+                    "INSERT INTO accounts "
+                    "(name, email, password_hash, role, email_verified) "
+                    "VALUES (%s, %s, %s, %s, 0)",
                     (name, email, generate_password_hash(password), role),
                 )
                 account_id = cursor.lastrowid
@@ -454,30 +664,58 @@ def register():
     except IntegrityError:
         return api_error("An account with that email already exists.", 409)
 
+    otp_sent = True
+    retry_after = None
+    message = "Enter the 6-digit code we emailed you."
+    try:
+        delivered = issue_otp(account_id, email)
+        if not delivered:
+            otp_sent = False
+            message = (
+                "Email delivery is not configured. The verification code was "
+                "printed in the server console."
+            )
+    except OtpCooldownError as error:
+        otp_sent = False
+        retry_after = error.retry_after
+        message = "Please wait a moment before requesting a new code."
+    except EmailDeliveryError:
+        otp_sent = False
+        retry_after = OTP_RESEND_SECONDS
+        message = (
+            "Your account was created, but the verification email could not "
+            "be sent. Use Resend code to try again."
+        )
+
+    # The account exists but is not signed in until the email is verified.
     session.clear()
-    session["user_id"] = account_id
-    session["role"] = role
+    session["pending_user_id"] = account_id
     return jsonify({
+        "verification_required": True,
+        "otp_sent": otp_sent,
+        "retry_after": retry_after,
+        "message": message,
+        "email": email,
         "account": {
             "id": account_id,
             "name": name,
             "email": email,
             "role": role,
-        }
+        },
     }), 201
 
 
 def authenticate(email, password, role=None):
     if role is None:
         query = (
-            "SELECT id, name, email, password_hash, role FROM accounts "
-            "WHERE email = %s AND role IN ('hotel', 'ngo')"
+            "SELECT id, name, email, password_hash, role, email_verified "
+            "FROM accounts WHERE email = %s AND role IN ('hotel', 'ngo')"
         )
         params = (email,)
     else:
         query = (
-            "SELECT id, name, email, password_hash, role FROM accounts "
-            "WHERE email = %s AND role = %s"
+            "SELECT id, name, email, password_hash, role, email_verified "
+            "FROM accounts WHERE email = %s AND role = %s"
         )
         params = (email, role)
 
@@ -506,10 +744,139 @@ def login():
     if not account:
         return api_error("Email or password is incorrect.", 401)
 
+    if not account["email_verified"]:
+        session.clear()
+        session["pending_user_id"] = account["id"]
+        return jsonify({
+            "error": "Verify your email address to continue.",
+            "code": "email_unverified",
+            "email": account["email"],
+        }), 403
+
     session.clear()
     session["user_id"] = account["id"]
     session["role"] = account["role"]
     return jsonify({"account": account_payload(account)})
+
+
+@app.post("/api/verify-email")
+def verify_email():
+    data = body_data()
+    if data is None:
+        return api_error("Send verification details as JSON.", 400)
+
+    email = str(data.get("email", "")).strip().lower()
+    code = str(data.get("code", "")).strip()
+    if len(email) > 254 or not EMAIL_PATTERN.fullmatch(email):
+        return api_error("Enter a valid email address.", 400)
+    if not OTP_CODE_PATTERN.fullmatch(code):
+        return api_error("Enter the 6-digit code from your email.", 400)
+
+    with db_connection() as connection:
+        with connection.cursor(dictionary=True) as cursor:
+            cursor.execute(
+                "SELECT id, name, email, role, email_verified, otp_hash, "
+                "otp_expires_at, otp_attempts FROM accounts "
+                "WHERE email = %s AND role IN ('hotel', 'ngo') FOR UPDATE",
+                (email,),
+            )
+            account = cursor.fetchone()
+            invalid = api_error(
+                "The code is incorrect or has expired. Request a new code.", 400
+            )
+            if not account:
+                return invalid
+            if account["email_verified"]:
+                return jsonify({
+                    "verified": True,
+                    "logged_in": session.get("user_id") == account["id"],
+                    "message": "This email is already verified. Please sign in.",
+                })
+            if account["otp_attempts"] >= OTP_MAX_ATTEMPTS:
+                return api_error(
+                    "Too many incorrect attempts. Request a new code.", 429
+                )
+            if (
+                not account["otp_hash"]
+                or not account["otp_expires_at"]
+                or account["otp_expires_at"] < utc_now()
+            ):
+                return invalid
+            if not hmac.compare_digest(
+                account["otp_hash"], otp_digest(account["id"], code)
+            ):
+                cursor.execute(
+                    "UPDATE accounts SET otp_attempts = otp_attempts + 1 "
+                    "WHERE id = %s",
+                    (account["id"],),
+                )
+                connection.commit()
+                return invalid
+            cursor.execute(
+                "UPDATE accounts SET email_verified = 1, otp_hash = NULL, "
+                "otp_expires_at = NULL, otp_attempts = 0 WHERE id = %s",
+                (account["id"],),
+            )
+        connection.commit()
+
+    logged_in = False
+    if session.get("pending_user_id") == account["id"]:
+        session.clear()
+        session["user_id"] = account["id"]
+        session["role"] = account["role"]
+        logged_in = True
+    return jsonify({
+        "verified": True,
+        "logged_in": logged_in,
+        "account": account_payload(account),
+    })
+
+
+@app.post("/api/resend-otp")
+def resend_otp():
+    data = body_data()
+    if data is None:
+        return api_error("Send the account email as JSON.", 400)
+
+    email = str(data.get("email", "")).strip().lower()
+    if len(email) > 254 or not EMAIL_PATTERN.fullmatch(email):
+        return api_error("Enter a valid email address.", 400)
+
+    with db_connection() as connection:
+        with connection.cursor(dictionary=True) as cursor:
+            cursor.execute(
+                "SELECT id, email_verified FROM accounts "
+                "WHERE email = %s AND role IN ('hotel', 'ngo') LIMIT 1",
+                (email,),
+            )
+            account = cursor.fetchone()
+
+    if not account or account["email_verified"]:
+        # Do not reveal whether an address is registered.
+        return jsonify({
+            "ok": True,
+            "otp_sent": False,
+            "message": "If this email needs verification, a new code was sent.",
+        })
+
+    try:
+        delivered = issue_otp(account["id"], email)
+    except OtpCooldownError as error:
+        return jsonify({
+            "error": f"Please wait {error.retry_after} seconds before requesting another code.",
+            "retry_after": error.retry_after,
+        }), 429
+    except EmailDeliveryError:
+        return api_error(
+            "The verification email could not be sent. Please try again shortly.",
+            502,
+        )
+
+    return jsonify({
+        "ok": True,
+        "otp_sent": delivered,
+        "retry_after": OTP_RESEND_SECONDS,
+    })
 
 
 @app.post("/api/admin/login")
@@ -850,8 +1217,9 @@ def create_admin(email):
         with db_connection() as connection:
             with connection.cursor(dictionary=True) as cursor:
                 cursor.execute(
-                    "INSERT INTO accounts (name, email, password_hash, role) "
-                    "VALUES (%s, %s, %s, 'admin')",
+                    "INSERT INTO accounts "
+                    "(name, email, password_hash, role, email_verified) "
+                    "VALUES (%s, %s, %s, 'admin', 1)",
                     (name, email, generate_password_hash(password)),
                 )
             connection.commit()
@@ -868,6 +1236,30 @@ def check_database():
             cursor.execute("SELECT 1")
             cursor.fetchone()
     click.echo("FoodBridge database connection is ready.")
+
+
+@app.cli.command("send-test-email")
+@click.argument("recipient")
+def send_test_email(recipient):
+    """Send a test message using the configured SMTP settings."""
+    recipient = recipient.strip().lower()
+    if not EMAIL_PATTERN.fullmatch(recipient):
+        raise click.ClickException("Enter a valid email address.")
+    if not email_delivery_configured():
+        raise click.ClickException(
+            "Set FOODBRIDGE_SMTP_HOST and FOODBRIDGE_SMTP_FROM_EMAIL first."
+        )
+    try:
+        send_email(
+            recipient,
+            "FoodBridge email test",
+            "This is a test email from FoodBridge. Your SMTP settings work.",
+            "<p>This is a test email from <strong>FoodBridge</strong>. "
+            "Your SMTP settings work.</p>",
+        )
+    except EmailDeliveryError as error:
+        raise click.ClickException(str(error)) from error
+    click.echo(f"Test email sent to {recipient}.")
 
 
 if __name__ == "__main__":

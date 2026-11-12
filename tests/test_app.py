@@ -1,4 +1,5 @@
 import io
+import re
 import tempfile
 import unittest
 from datetime import date, datetime
@@ -306,6 +307,85 @@ class FoodBridgeAppTests(unittest.TestCase):
                 "created_at": "2026-10-16T12:00:00",
             },
         )
+
+    def test_otp_codes_are_six_digits_and_random(self):
+        codes = {foodbridge_app.generate_otp() for _ in range(50)}
+        self.assertTrue(all(re.fullmatch(r"\d{6}", code) for code in codes))
+        self.assertGreater(len(codes), 1)
+
+    def test_otp_digest_is_bound_to_one_account_and_never_holds_the_code(self):
+        first = foodbridge_app.otp_digest(1, "123456")
+        second = foodbridge_app.otp_digest(2, "123456")
+        self.assertNotEqual(first, second)
+        self.assertEqual(first, foodbridge_app.otp_digest(1, "123456"))
+        self.assertNotIn("123456", first)
+
+    def test_verification_email_contains_the_code_but_not_a_plain_stored_value(self):
+        with patch.object(foodbridge_app, "send_email") as send:
+            foodbridge_app.send_otp_email("user@example.org", "654321")
+        args = send.call_args.args
+        self.assertEqual(args[0], "user@example.org")
+        self.assertIn("FoodBridge", args[1])
+        self.assertIn("654321", args[2])
+        self.assertIn("654321", args[3])
+
+    def test_email_delivery_reports_missing_configuration(self):
+        with patch.dict(
+            foodbridge_app.os.environ,
+            {
+                "FOODBRIDGE_SMTP_HOST": "",
+                "FOODBRIDGE_SMTP_FROM_EMAIL": "",
+            },
+        ):
+            self.assertFalse(foodbridge_app.email_delivery_configured())
+            with self.assertRaises(foodbridge_app.EmailDeliveryError):
+                foodbridge_app.send_email(
+                    "user@example.org",
+                    "Subject",
+                    "Body",
+                )
+
+    def test_smtp_defaults_use_starttls_and_port_587(self):
+        with patch.dict(
+            foodbridge_app.os.environ,
+            {
+                "FOODBRIDGE_SMTP_HOST": "smtp-relay.brevo.com",
+                "FOODBRIDGE_SMTP_FROM_EMAIL": "sender@example.org",
+            },
+            clear=False,
+        ):
+            foodbridge_app.os.environ.pop("FOODBRIDGE_SMTP_SECURITY", None)
+            foodbridge_app.os.environ.pop("FOODBRIDGE_SMTP_PORT", None)
+            settings = foodbridge_app.smtp_settings()
+        self.assertEqual(settings["security"], "starttls")
+        self.assertEqual(settings["port"], "587")
+
+    def test_verify_email_validates_input_before_database_access(self):
+        response = self.client.post("/api/verify-email", json={})
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("valid email", response.get_json()["error"])
+
+        response = self.client.post(
+            "/api/verify-email",
+            json={"email": "user@example.org", "code": "12345"},
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("6-digit", response.get_json()["error"])
+
+    def test_resend_otp_validates_input_before_database_access(self):
+        response = self.client.post("/api/resend-otp", json={})
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("valid email", response.get_json()["error"])
+
+    def test_authentication_pages_include_the_otp_step(self):
+        for path in ("/login", "/signup"):
+            response = self.client.get(path)
+            page = response.get_data(as_text=True)
+            response.close()
+            self.assertIn('id="otpStep"', page, path)
+            self.assertIn('id="otpForm"', page, path)
+            self.assertIn('id="resendOtpButton"', page, path)
+            self.assertIn('autocomplete="one-time-code"', page, path)
 
 
 if __name__ == "__main__":

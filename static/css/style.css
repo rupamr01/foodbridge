@@ -405,6 +405,7 @@ a { color: var(--green); }
 .field-hint { color: var(--muted); font-weight: 400; }
 .form-message { min-height: 0; margin: 0; color: #b83232; font-size: 12px; line-height: 1.5; }
 .form-message:not(:empty) { margin: 3px 0 8px; padding: 10px 12px; background: #fff1ef; border-radius: 9px; }
+.form-message.success { color: #087f5b; background: #edf9f2; }
 
 /* ---------- Tables and profile ---------- */
 .table-wrap {
@@ -479,6 +480,14 @@ a { color: var(--green); }
 .auth-card .field input,
 .auth-card .field select { min-height: 45px; font-size: 14px; }
 .auth-card .btn { min-height: 45px; font-size: 13px; }
+.otp-input {
+  text-align: center;
+  font-size: 24px !important;
+  font-weight: 800;
+  letter-spacing: 10px;
+  padding-left: 16px;
+}
+.otp-resend { margin-top: 12px; }
 .auth-switch { margin: 22px 0 0; color: var(--muted); font-size: 12px; text-align: center; }
 .auth-switch a { color: var(--green); font-weight: 700; }
 .auth-foot { margin: 18px 0 0; color: #89978f; font-size: 11px; text-align: center; }

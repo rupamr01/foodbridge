@@ -233,6 +233,14 @@ SUPABASE_URL=https://your-project-ref.supabase.co
 SUPABASE_PUBLISHABLE_KEY=sb_publishable_...
 SUPABASE_SECRET_KEY=sb_secret_...
 SUPABASE_STORAGE_BUCKET=food-photos
+
+FOODBRIDGE_SMTP_HOST=smtp-relay.brevo.com
+FOODBRIDGE_SMTP_PORT=587
+FOODBRIDGE_SMTP_USERNAME=your-brevo-login-email
+FOODBRIDGE_SMTP_PASSWORD=your-brevo-smtp-key
+FOODBRIDGE_SMTP_FROM_EMAIL=your-verified-sender@example.com
+FOODBRIDGE_SMTP_FROM_NAME=FoodBridge
+FOODBRIDGE_SMTP_SECURITY=starttls
 ```
 
 What each value means:
@@ -246,6 +254,8 @@ What each value means:
 | `SUPABASE_PUBLISHABLE_KEY` | Public browser key (`sb_publishable_...`). Safe to expose. |
 | `SUPABASE_SECRET_KEY` | Private server key (`sb_secret_...`). Never expose. |
 | `SUPABASE_STORAGE_BUCKET` | Bucket name, default `food-photos`. |
+| `FOODBRIDGE_SMTP_*` | SMTP relay used to send 6-digit signup verification codes. `FOODBRIDGE_SMTP_FROM_EMAIL` must be a sender verified with the provider. |
+| `FOODBRIDGE_OTP_DEBUG` | Local development only. Set to `1` to print the OTP in the server console when email delivery fails. Never enable in production. |
 
 #### New keys vs legacy keys
 
@@ -416,11 +426,15 @@ If you change the port, update the Supabase Site URL and Redirect URLs to match.
 
 ### 6.1 Email/password authentication
 
-- `POST /api/register` validates name, email, password, and role, hashes the password with Werkzeug, and inserts the account into MySQL.
-- `POST /api/login` verifies the password hash and writes `user_id` and `role` into the Flask session cookie.
-- `POST /api/admin/login` only allows the `admin` role.
+- `POST /api/register` validates name, email, password, and role, hashes the password with Werkzeug, and inserts the account as **unverified**.
+- It generates a random 6-digit code, stores only an HMAC-SHA256 digest, and emails the code through the configured SMTP relay.
+- `POST /api/verify-email` checks the code, the 10-minute expiry, and the 5-attempt limit, then marks `email_verified = 1`.
+- `POST /api/resend-otp` issues a new code after a 60-second cooldown. It allows at most 5 sends per account per hour.
+- `POST /api/login` verifies the password hash. If the email is unverified it returns `403` with `code: "email_unverified"` and the browser shows the same OTP step.
+- Google sign-in marks the email verified automatically, because Google already proved ownership.
+- `POST /api/admin/login` only allows the `admin` role. Admin accounts are created verified by the CLI.
 - Every protected endpoint uses `@require_user(...)` to check the session and role server-side.
-- The browser never receives password hashes.
+- The browser never receives password hashes or stored OTP values.
 
 ### 6.2 Google sign-in
 
@@ -502,6 +516,12 @@ Browser geolocation normally requires HTTPS or `localhost`. On a plain-HTTP LAN 
 | `name` | Organization name |
 | `email` | Unique |
 | `password_hash` | Always present; Google-only accounts get an unusable random hash |
+| `email_verified` | `1` after the 6-digit code is confirmed; pre-existing and Google accounts are `1` |
+| `otp_hash` | HMAC-SHA256 digest of the current code, never the plain code |
+| `otp_expires_at` | Code expiry, 10 minutes after sending |
+| `otp_attempts` | Incorrect guesses for the current code; maximum 5 |
+| `otp_last_sent_at` | Enforces the 60-second resend cooldown |
+| `otp_send_window_start`, `otp_send_count` | Limit each account to 5 code sends per hour |
 | `role` | `hotel`, `ngo`, or `admin` |
 | `created_at` | Timestamp |
 
@@ -857,6 +877,13 @@ git push -u origin main
    | `SUPABASE_PUBLISHABLE_KEY` | Your current publishable key |
    | `SUPABASE_SECRET_KEY` | Your current secret key |
    | `SUPABASE_STORAGE_BUCKET` | `food-photos` |
+   | `FOODBRIDGE_SMTP_HOST` | `smtp-relay.brevo.com` |
+   | `FOODBRIDGE_SMTP_PORT` | `587` |
+   | `FOODBRIDGE_SMTP_USERNAME` | Your Brevo login email |
+   | `FOODBRIDGE_SMTP_PASSWORD` | Your Brevo SMTP key |
+   | `FOODBRIDGE_SMTP_FROM_EMAIL` | The sender address verified in Brevo |
+   | `FOODBRIDGE_SMTP_FROM_NAME` | `FoodBridge` |
+   | `FOODBRIDGE_SMTP_SECURITY` | `starttls` |
 
    Generate the Flask secret locally:
 
@@ -877,7 +904,32 @@ git push -u origin main
 
    If the name is already taken, Render asks you to choose another one.
 
-#### C4. Create the admin account in the cloud database
+#### C4. Run the email OTP migration
+
+Existing databases need the new account columns before the updated app is deployed. In MySQL Workbench connected to TiDB, open and run:
+
+```text
+database/migrations/002_email_otp.sql
+```
+
+Or run the SQL directly:
+
+```sql
+ALTER TABLE accounts
+  ADD COLUMN email_verified TINYINT(1) NOT NULL DEFAULT 0 AFTER password_hash,
+  ADD COLUMN otp_hash CHAR(64) NULL AFTER email_verified,
+  ADD COLUMN otp_expires_at DATETIME NULL AFTER otp_hash,
+  ADD COLUMN otp_attempts SMALLINT UNSIGNED NOT NULL DEFAULT 0 AFTER otp_expires_at,
+  ADD COLUMN otp_last_sent_at DATETIME NULL AFTER otp_attempts,
+  ADD COLUMN otp_send_window_start DATETIME NULL AFTER otp_last_sent_at,
+  ADD COLUMN otp_send_count SMALLINT UNSIGNED NOT NULL DEFAULT 0 AFTER otp_send_window_start;
+
+UPDATE accounts SET email_verified = 1;
+```
+
+The `UPDATE` marks all accounts that existed before this feature as verified. Google accounts are marked verified automatically by the app.
+
+#### C5. Create the admin account in the cloud database
 
 Run this locally against the TiDB database. The environment variables below override the values in `.env` for this terminal only.
 
@@ -896,7 +948,7 @@ If you do not have the CA file on Windows, download it from <https://letsencrypt
 
 Close that PowerShell window afterward so the cloud credentials are not left in your environment.
 
-#### C5. Point Supabase and Google at the Render URL
+#### C6. Point Supabase and Google at the Render URL
 
 In Supabase → **Authentication → URL Configuration**:
 
@@ -912,20 +964,21 @@ In Google Cloud → your OAuth client:
 - The **Authorized redirect URI** does not change:
   `https://<ref>.supabase.co/auth/v1/callback`
 
-#### C6. Test the live site
+#### C7. Test the live site
 
 1. Open the Render URL.
 2. Wait for the first wake-up if the service was idle.
 3. Open `/login` in an incognito window.
 4. Sign in with Google.
 5. Complete the new-account form if prompted.
-6. Create a hotel listing with a photo and a map pin.
-7. Create or use an NGO account and request the listing.
-8. Accept the request as the hotel.
-9. Sign in at `/admin` with the admin account.
-10. Confirm that photos load from Supabase and that the map tiles load.
+6. Sign up with a real email address you can open, enter the 6-digit code, and confirm the code expires after 10 minutes and Resend enforces a 60-second cooldown.
+7. Create a hotel listing with a photo and a map pin.
+8. Create or use an NGO account and request the listing.
+9. Accept the request as the hotel.
+10. Sign in at `/admin` with the admin account.
+11. Confirm that photos load from Supabase and that the map tiles load.
 
-#### C7. Updating the live site
+#### C8. Updating the live site
 
 - Push changes to GitHub. Render redeploys automatically.
 - Database changes must be applied separately to TiDB.
