@@ -3,11 +3,12 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="theme-color" content="#087f5b">
+  <meta name="theme-color" content="#163a2b">
   <title>FoodBridge | Community Food Network</title>
   <link rel="icon" href="/static/assets/images/logo.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/static/vendor/leaflet/leaflet.css">
   <link rel="stylesheet" href="/static/css/style.css">
+  <link rel="stylesheet" href="/static/css/theme.css">
 </head>
 <body>
   <div class="app-shell">
@@ -24,23 +25,37 @@
       <nav class="nav-list" id="mainNavigation" aria-label="Main navigation"></nav>
       <div class="sidebar-bottom">
         <div class="impact-card">
-          <div class="impact-symbol">✦</div>
+          <div class="impact-symbol" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M20 4c-9 0-14 5-14 11a5 5 0 0 0 5 5c6 0 9-7 9-16Z"/><path d="M4 20c2-6 6-9 11-11"/></svg>
+          </div>
           <strong>Good food. Good people.</strong>
           <p>Connect surplus food with communities that need it.</p>
         </div>
-        <button class="nav-item" id="logoutButton" type="button"><span aria-hidden="true">↪</span> Sign out</button>
-        <small class="version">FOODBRIDGE · COMMUNITY FOOD NETWORK</small>
+        <button class="nav-item" id="logoutButton" type="button">
+          <span aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5"/><path d="M21 12H9"/></svg>
+          </span>
+          Sign out
+        </button>
+        <small class="version">FOODBRIDGE &middot; COMMUNITY FOOD NETWORK</small>
       </div>
     </aside>
 
     <main class="main-area">
       <header class="topbar">
-        <button class="menu-toggle" id="menuToggle" aria-label="Toggle navigation" type="button">☰</button>
+        <button class="menu-toggle" id="menuToggle" aria-label="Toggle navigation" type="button">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+        </button>
         <div class="breadcrumb">FoodBridge <span>/</span> <strong id="pageName">Overview</strong></div>
-        <div class="top-user"><div><strong id="topUserName">FoodBridge</strong><small id="topUserRole">Account</small></div></div>
+        <div class="top-user">
+          <span class="top-user-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.5"/><path d="M5 20c.8-3.8 3.5-6 7-6s6.2 2.2 7 6"/></svg>
+          </span>
+          <div><strong id="topUserName">FoodBridge</strong><small id="topUserRole">Account</small></div>
+        </div>
       </header>
       <section class="content" id="pageContent" aria-live="polite"></section>
-      <footer>© 2026 FoodBridge <span>Connecting surplus food with communities in need.</span></footer>
+      <footer>&copy; 2026 FoodBridge <span>Connecting surplus food with communities in need.</span></footer>
     </main>
   </div>
   <div class="toast" id="toast" role="status" aria-live="polite"></div>

@@ -3,11 +3,12 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="theme-color" content="#087f5b">
+  <meta name="theme-color" content="#163a2b">
   <meta name="description" content="FoodBridge connects Hotels with surplus food to NGOs supporting their communities.">
   <title>FoodBridge | Share food. Strengthen communities.</title>
   <link rel="icon" href="/static/assets/images/logo.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/static/css/style.css">
+  <link rel="stylesheet" href="/static/css/theme.css">
 </head>
 <body class="landing-page">
   <header class="public-header">
@@ -17,81 +18,215 @@
     </a>
     <nav class="public-nav" aria-label="Main navigation">
       <a href="#how-it-works">How it works</a>
-      <a class="btn btn-outline" href="/login">Sign in</a>
+      <a href="#join-foodbridge">For organizations</a>
+      <a class="public-nav-signin" href="/login">Sign in</a>
+      <a class="btn btn-primary public-nav-cta" href="#join-foodbridge">Get started</a>
     </nav>
   </header>
 
   <main>
     <section class="public-hero">
       <div class="public-hero-copy">
-        <p class="eyebrow">A COMMUNITY FOOD NETWORK</p>
+        <p class="eyebrow">A community food network</p>
         <h1>Good food should reach people, <span>not the bin.</span></h1>
-        <p>FoodBridge brings Hotels with surplus food together with NGOs serving local communities. Share what you have. Request what you need.</p>
+        <p>FoodBridge connects Hotels with surplus food to local NGOs, turning what would be wasted into meals, groceries, and support for the community.</p>
         <div class="hero-actions">
-          <a class="btn btn-primary" href="#join-foodbridge">Get started <span aria-hidden="true">↗</span></a>
-          <a class="public-text-link" href="/login">Already have an account? Sign in</a>
+          <a class="btn btn-primary btn-lg" href="#join-foodbridge">
+            Join the network
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 17 17 7M7 7h10v10"/></svg>
+          </a>
+          <a class="public-text-link" href="#how-it-works">See how it works</a>
         </div>
-        <div class="public-proof"><span aria-hidden="true">✦</span> One shared network. Less food wasted. More communities supported.</div>
+        <div class="public-proof" aria-label="FoodBridge is built for hotels and NGOs">
+          <span class="public-proof-item">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg>
+            For Hotels
+          </span>
+          <span class="public-proof-item">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg>
+            For NGOs
+          </span>
+          <span class="public-proof-item">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg>
+            Local by design
+          </span>
+        </div>
       </div>
-      <div class="public-hero-art" role="img" aria-label="Illustration of fresh food being shared with a community">
-        <div class="hero-orbit hero-orbit-one"></div>
-        <div class="hero-orbit hero-orbit-two"></div>
-        <div class="share-illustration">
-          <div class="share-leaf">✿</div>
-          <div class="share-box"><span>🥬</span><span>🍞</span><span>🥕</span></div>
-          <div class="share-heart">♥</div>
+
+      <div class="public-hero-art" role="img" aria-label="Preview of a FoodBridge surplus food listing with an exact pickup point and an accepted NGO request.">
+        <div class="hero-backdrop" aria-hidden="true"></div>
+        <div class="hero-route" aria-hidden="true">
+          <span class="hero-route-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12S4 16 4 10a8 8 0 1 1 16 0Z"/><circle cx="12" cy="10" r="2.5"/></svg>
+          </span>
+          <span>Exact pickup point</span>
         </div>
-        <div class="floating-note note-hotel"><span>♧</span><div><strong>Hotels share</strong><small>Surplus, made useful</small></div></div>
-        <div class="floating-note note-ngo"><span>♡</span><div><strong>NGOs connect</strong><small>Food for their community</small></div></div>
+        <article class="hero-listing">
+          <div class="hero-listing-media">
+            <img src="/static/assets/images/hero-produce.svg" alt="">
+            <span class="hero-chip"><span class="hero-chip-dot"></span>Available today</span>
+          </div>
+          <div class="hero-listing-body">
+            <div class="hero-listing-top">
+              <span class="hero-category">Fresh produce</span>
+              <span class="hero-quantity">24 kg available</span>
+            </div>
+            <h2>Seasonal vegetables</h2>
+            <p class="hero-listing-meta">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 10c0 6-8 12-8 12S4 16 4 10a8 8 0 1 1 16 0Z"/><circle cx="12" cy="10" r="2.5"/></svg>
+              Pickup &middot; Today, 6&ndash;8 PM
+            </p>
+            <div class="hero-listing-foot">
+              <span class="hero-donor">
+                <span class="hero-donor-mark">H</span>
+                <span><strong>Local hotel</strong><small>Food donor</small></span>
+              </span>
+              <span class="hero-listing-action">
+                Request
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 17 17 7M7 7h10v10"/></svg>
+              </span>
+            </div>
+          </div>
+        </article>
+        <div class="hero-toast" aria-hidden="true">
+          <span class="hero-toast-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg>
+          </span>
+          <span><strong>Request accepted</strong><small>Pickup details shared</small></span>
+        </div>
       </div>
     </section>
 
     <section class="join-section" id="join-foodbridge">
       <div class="section-heading">
-        <p class="eyebrow">CHOOSE YOUR ACCOUNT</p>
+        <p class="eyebrow">Choose your account</p>
         <h2>How would you like to join?</h2>
         <p>Choose the workspace that fits your organization. You can sign in anytime from the top of the page.</p>
       </div>
       <div class="join-cards">
         <article class="join-card">
-          <span class="join-icon" aria-hidden="true">♧</span>
-          <p class="eyebrow">FOR HOTELS</p>
+          <div class="join-card-top">
+            <span class="join-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 21V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v16"/><path d="M2 21h20"/><path d="M9 7h2M9 11h2M9 15h2"/><path d="M16 11h2a2 2 0 0 1 2 2v8"/></svg>
+            </span>
+            <span class="join-tag">For Hotels</span>
+          </div>
           <h3>Share surplus food</h3>
-          <p>Post available food, add a photo and exact pickup point, and respond to requests from local NGOs.</p>
-          <a class="btn btn-primary" href="/signup?role=hotel">Join as a Hotel <span aria-hidden="true">↗</span></a>
-          <a class="join-signin" href="/login">Already registered? Sign in</a>
+          <p>Post available food, add a photo and an exact pickup point, and respond to requests from local NGOs.</p>
+          <ul class="join-list">
+            <li>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg>
+              Publish surplus food in minutes
+            </li>
+            <li>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg>
+              Add a photo and exact pickup point
+            </li>
+            <li>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg>
+              Accept the requests you can fulfill
+            </li>
+          </ul>
+          <div class="join-card-actions">
+            <a class="btn btn-primary" href="/signup?role=hotel">
+              Join as a Hotel
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 17 17 7M7 7h10v10"/></svg>
+            </a>
+            <a class="join-signin" href="/login">Already registered? Sign in</a>
+          </div>
         </article>
+
         <article class="join-card ngo-join">
-          <span class="join-icon" aria-hidden="true">♡</span>
-          <p class="eyebrow">FOR NGOs</p>
+          <div class="join-card-top">
+            <span class="join-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1.1-1.1a5.5 5.5 0 0 0-7.8 7.8l1.1 1.1L12 21l7.8-7.5 1.1-1.1a5.5 5.5 0 0 0-.1-7.8Z"/></svg>
+            </span>
+            <span class="join-tag">For NGOs</span>
+          </div>
           <h3>Find food for your community</h3>
           <p>Browse available Hotel listings, request quantities, and follow each request.</p>
-          <a class="btn btn-primary" href="/signup?role=ngo">Join as an NGO <span aria-hidden="true">↗</span></a>
-          <a class="join-signin" href="/login">Already registered? Sign in</a>
+          <ul class="join-list">
+            <li>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg>
+              Browse food shared by local Hotels
+            </li>
+            <li>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg>
+              Request the quantity your community needs
+            </li>
+            <li>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg>
+              Follow every request from start to pickup
+            </li>
+          </ul>
+          <div class="join-card-actions">
+            <a class="btn btn-primary" href="/signup?role=ngo">
+              Join as an NGO
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 17 17 7M7 7h10v10"/></svg>
+            </a>
+            <a class="join-signin" href="/login">Already registered? Sign in</a>
+          </div>
         </article>
       </div>
     </section>
 
     <section class="how-section" id="how-it-works">
       <div class="section-heading">
-        <p class="eyebrow">SIMPLE BY DESIGN</p>
+        <p class="eyebrow">Simple by design</p>
         <h2>From surplus to shared</h2>
+        <p>Three clear steps keep every donation visible and every pickup accountable.</p>
       </div>
       <div class="steps-grid">
-        <article class="step-card"><span>01</span><h3>Hotels post food</h3><p>Add the food, amount, best-before date, a photo, and a precise map pin.</p></article>
-        <article class="step-card"><span>02</span><h3>NGOs make a request</h3><p>Browse current listings, see exact pickup locations, and request what you can collect.</p></article>
-        <article class="step-card"><span>03</span><h3>Hotels respond</h3><p>Hotels accept or decline requests; both organizations can see the latest status.</p></article>
+        <article class="step-card">
+          <span>01</span>
+          <h3>Hotels post food</h3>
+          <p>Add the food, amount, best-before date, a photo, and a precise map pin.</p>
+        </article>
+        <article class="step-card">
+          <span>02</span>
+          <h3>NGOs make a request</h3>
+          <p>Browse current listings, see exact pickup locations, and request what you can collect.</p>
+        </article>
+        <article class="step-card">
+          <span>03</span>
+          <h3>Hotels respond</h3>
+          <p>Hotels accept or decline requests; both organizations can see the latest status.</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="public-cta">
+      <div>
+        <p class="eyebrow">Share what you can</p>
+        <h2>Make surplus food count.</h2>
+        <p>Join the network turning good food into community support.</p>
+      </div>
+      <div class="public-cta-actions">
+        <a class="btn btn-primary" href="#join-foodbridge">Get started</a>
+        <a class="btn btn-outline" href="/login">Sign in</a>
       </div>
     </section>
   </main>
 
   <footer class="public-footer">
-    <a class="brand" href="/">
-      <img src="/static/assets/images/logo.svg" alt="" class="brand-logo">
-      <span>Food<span class="brand-green">Bridge</span><small>LESS WASTE. MORE SMILES.</small></span>
-    </a>
-    <p>Connecting surplus food with communities in need.</p>
-    <a class="admin-entry" href="/admin">Administrator sign in</a>
+    <div class="public-footer-brand">
+      <a class="brand" href="/">
+        <img src="/static/assets/images/logo.svg" alt="" class="brand-logo">
+        <span>Food<span class="brand-green">Bridge</span><small>LESS WASTE. MORE SMILES.</small></span>
+      </a>
+      <p>Connecting surplus food with communities in need.</p>
+    </div>
+    <nav class="public-footer-nav" aria-label="Footer navigation">
+      <a href="#how-it-works">How it works</a>
+      <a href="#join-foodbridge">Join the network</a>
+      <a href="/login">Sign in</a>
+      <a href="/signup">Create account</a>
+      <a class="admin-entry" href="/admin">Administrator sign in</a>
+    </nav>
+    <p class="public-footer-copy">
+      <span>&copy; 2026 FoodBridge. All rights reserved.</span>
+      <span>Built for Hotels and NGOs.</span>
+    </p>
   </footer>
 </body>
 </html>
